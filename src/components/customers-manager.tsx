@@ -4,6 +4,7 @@ import {
   Archive,
   ChevronLeft,
   ChevronRight,
+  LoaderCircle,
   Mail,
   MapPin,
   Pencil,
@@ -20,7 +21,13 @@ import {
   updateCustomerAction,
 } from "@/app/actions/customers";
 import type { CustomerListItem } from "@/app/actions/customers";
-import { Button, EmptyState, ErrorState, Surface } from "@/components/ui";
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  Surface,
+  TableSkeleton,
+} from "@/components/ui";
 import {
   customerInputSchema,
   customerUpdateSchema,
@@ -107,7 +114,7 @@ function CustomerFormDialog({
 }: {
   customer: CustomerListItem | null;
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [values, setValues] = useState<CustomerFormValues>(
@@ -116,6 +123,7 @@ function CustomerFormDialog({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
+  const pendingRef = useRef(false);
   const editing = customer !== null;
 
   useEffect(() => {
@@ -125,12 +133,14 @@ function CustomerFormDialog({
   }, []);
 
   function close() {
+    if (pendingRef.current) return;
     dialogRef.current?.close();
     onClose();
   }
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pendingRef.current) return;
     const input = getCustomerInput(values);
     const parsed = editing
       ? customerUpdateSchema.safeParse({ ...input, customerId: customer.id })
@@ -147,6 +157,7 @@ function CustomerFormDialog({
 
     setErrors({});
     setMessage("");
+    pendingRef.current = true;
     startTransition(async () => {
       try {
         const result = editing
@@ -157,10 +168,14 @@ function CustomerFormDialog({
           setErrors(result.fieldErrors ?? {});
           return;
         }
-        await onSaved();
-        close();
+        pendingRef.current = false;
+        if (dialogRef.current?.open) dialogRef.current.close();
+        onClose();
+        onSaved();
       } catch {
         setMessage("The customer could not be saved. Please try again.");
+      } finally {
+        pendingRef.current = false;
       }
     });
   }
@@ -253,7 +268,9 @@ function CustomerFormDialog({
           <div className="customer-dialog-actions">
             <Button disabled={pending} onClick={close} type="button">Cancel</Button>
             <Button disabled={pending} type="submit" variant="primary">
-              {pending ? "Saving…" : editing ? "Save changes" : "Create customer"}
+              {pending
+                ? <><LoaderCircle aria-hidden="true" className="button-spinner" size={15} /> Saving…</>
+                : editing ? "Save changes" : "Create customer"}
             </Button>
           </div>
         </form>
@@ -265,11 +282,13 @@ function CustomerFormDialog({
 function ArchiveDialog({
   customer,
   pending,
+  error,
   onCancel,
   onConfirm,
 }: {
   customer: CustomerListItem;
   pending: boolean;
+  error: string;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -299,10 +318,13 @@ function ArchiveDialog({
         <p className="auth-description">
           This customer will be hidden from the active list. Their record is kept and can be viewed using the archived filter.
         </p>
+        {error ? <p className="customer-form-message" role="alert">{error}</p> : null}
         <div className="customer-dialog-actions">
           <Button disabled={pending} onClick={onCancel} type="button">Cancel</Button>
           <Button disabled={pending} onClick={onConfirm} type="button" variant="primary">
-            {pending ? "Archiving…" : "Archive customer"}
+            {pending
+              ? <><LoaderCircle aria-hidden="true" className="button-spinner" size={15} /> Archiving…</>
+              : "Archive customer"}
           </Button>
         </div>
       </Surface>
@@ -337,15 +359,19 @@ export function CustomersManager({
   const [archivingCustomer, setArchivingCustomer] = useState<CustomerListItem | null>(null);
   const [pending, setPending] = useState(false);
   const [archivePending, setArchivePending] = useState(false);
+  const [archiveError, setArchiveError] = useState("");
+  const listRequestRef = useRef(0);
+  const archivePendingRef = useRef(false);
 
   async function refreshList(options?: {
     search?: string;
     archived?: boolean;
     nextOffset?: number;
-  }) {
+  }): Promise<boolean> {
     const search = options?.search ?? appliedSearch;
     const archived = options?.archived ?? includeArchived;
     const nextOffset = options?.nextOffset ?? offset;
+    const requestId = ++listRequestRef.current;
     setError("");
     setPending(true);
     try {
@@ -355,17 +381,22 @@ export function CustomersManager({
         search: search || undefined,
         includeArchived: archived,
       });
+      if (requestId !== listRequestRef.current) return false;
       if ("error" in result) {
         setError(result.error);
-        return;
+        return false;
       }
       setCustomers(result.customers);
       setHasMore(result.hasMore);
       setSuccessMessage("");
+      return true;
     } catch {
-      setError("Customers could not be loaded. Please try again.");
+      if (requestId === listRequestRef.current) {
+        setError("Customers could not be loaded. Please try again.");
+      }
+      return false;
     } finally {
-      setPending(false);
+      if (requestId === listRequestRef.current) setPending(false);
     }
   }
 
@@ -385,22 +416,26 @@ export function CustomersManager({
   }
 
   async function confirmArchive() {
-    if (!archivingCustomer) return;
+    if (!archivingCustomer || archivePendingRef.current) return;
+    archivePendingRef.current = true;
     setArchivePending(true);
+    setArchiveError("");
     try {
       const result = await archiveCustomerAction({ customerId: archivingCustomer.id });
       if ("error" in result) {
-        setError(result.error);
-        setArchivingCustomer(null);
+        setArchiveError(result.error);
         return;
       }
       const name = archivingCustomer.name;
       setArchivingCustomer(null);
-      await refreshList();
-      setSuccessMessage(`${name} was archived.`);
+      const refreshed = await refreshList();
+      setSuccessMessage(refreshed
+        ? `${name} was archived.`
+        : `${name} was archived, but the list could not be refreshed.`);
     } catch {
-      setError("The customer could not be archived. Please try again.");
+      setArchiveError("The customer could not be archived. Please try again.");
     } finally {
+      archivePendingRef.current = false;
       setArchivePending(false);
     }
   }
@@ -453,20 +488,35 @@ export function CustomersManager({
         {successMessage ? (
           <p className="customers-success-message" role="status">{successMessage}</p>
         ) : null}
-        {error ? (
+        {error && customers.length === 0 ? (
           <ErrorState
             description={error}
             onRetry={() => void refreshList()}
             title="Customers couldn’t be loaded"
           />
-        ) : pending ? (
-          <div aria-busy="true" className="customers-loading" role="status">
-            Loading customers…
-          </div>
-        ) : customers.length ? (
+        ) : (
           <>
+            {error ? (
+              <div className="list-inline-error" role="alert">
+                <span>{error}</span>
+                <Button onClick={() => void refreshList()} size="small">Try again</Button>
+              </div>
+            ) : null}
+            {pending && customers.length ? (
+              <div aria-live="polite" className="list-refreshing" role="status">
+                <LoaderCircle aria-hidden="true" className="inline-spinner" size={15} /> Updating customers
+              </div>
+            ) : null}
+            {pending && customers.length === 0 ? (
+              <TableSkeleton
+                className="customers-table"
+                headers={["Customer", "Contact", "Location", "Added", "Status", ...(canManage ? ["Actions"] : [])]}
+                label="customers"
+              />
+            ) : customers.length ? (
+              <>
             <div className="table-scroll">
-              <table className="data-table customers-table">
+              <table aria-busy={pending} className="data-table customers-table">
                 <thead>
                   <tr>
                     <th scope="col">Customer</th>
@@ -531,7 +581,10 @@ export function CustomersManager({
                                   aria-label={`Archive ${customer.name}`}
                                   className="icon-button customer-archive-button"
                                   disabled={pending}
-                                  onClick={() => setArchivingCustomer(customer)}
+                                  onClick={() => {
+                                    setArchiveError("");
+                                    setArchivingCustomer(customer);
+                                  }}
                                   type="button"
                                 >
                                   <Archive size={14} />
@@ -576,8 +629,8 @@ export function CustomersManager({
                 </Button>
               </div>
             </div>
-          </>
-        ) : (
+              </>
+            ) : (
           <>
             <EmptyState
               action={canManage && offset === 0 ? (
@@ -611,6 +664,8 @@ export function CustomersManager({
               </div>
             ) : null}
           </>
+            )}
+          </>
         )}
       </Surface>
 
@@ -618,15 +673,21 @@ export function CustomersManager({
         <CustomerFormDialog
           customer={editingCustomer}
           onClose={() => setEditingCustomer(undefined)}
-          onSaved={async () => {
-            await refreshList();
-            setSuccessMessage(editingCustomer ? "Customer changes saved." : "Customer created.");
+          onSaved={() => {
+            void refreshList().then((refreshed) => {
+              setSuccessMessage(refreshed
+                ? editingCustomer ? "Customer changes saved." : "Customer created."
+                : editingCustomer
+                  ? "Customer changes were saved, but the list could not be refreshed."
+                  : "Customer was created, but the list could not be refreshed.");
+            });
           }}
         />
       ) : null}
       {archivingCustomer ? (
         <ArchiveDialog
           customer={archivingCustomer}
+          error={archiveError}
           onCancel={() => setArchivingCustomer(null)}
           onConfirm={() => void confirmArchive()}
           pending={archivePending}

@@ -4,6 +4,7 @@ import {
   Archive,
   ChevronLeft,
   ChevronRight,
+  LoaderCircle,
   Package,
   Pencil,
   Plus,
@@ -19,7 +20,13 @@ import {
   updateProductAction,
 } from "@/app/actions/products";
 import type { ProductListItem } from "@/app/actions/products";
-import { Button, EmptyState, ErrorState, Surface } from "@/components/ui";
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  Surface,
+  TableSkeleton,
+} from "@/components/ui";
 import { formatCurrency } from "@/lib/formatting";
 import {
   productInputSchema,
@@ -66,7 +73,7 @@ function ProductFormDialog({
 }: {
   product: ProductListItem | null;
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [values, setValues] = useState<ProductFormValues>(
@@ -75,6 +82,7 @@ function ProductFormDialog({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
   const editing = product !== null;
 
   useEffect(() => {
@@ -83,13 +91,14 @@ function ProductFormDialog({
   }, []);
 
   function close() {
-    if (pending) return;
+    if (pendingRef.current) return;
     dialogRef.current?.close();
     onClose();
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pendingRef.current) return;
     const input = {
       name: values.name,
       sku: values.sku,
@@ -111,6 +120,7 @@ function ProductFormDialog({
 
     setErrors({});
     setMessage("");
+    pendingRef.current = true;
     setPending(true);
     try {
       const result = editing
@@ -121,13 +131,15 @@ function ProductFormDialog({
         setErrors(result.fieldErrors ?? {});
         return;
       }
-      await onSaved();
-      dialogRef.current?.close();
+      pendingRef.current = false;
+      if (dialogRef.current?.open) dialogRef.current.close();
       onClose();
+      onSaved();
     } catch {
       setMessage("The product could not be saved. Please try again.");
     } finally {
-      setPending(false);
+      pendingRef.current = false;
+      if (dialogRef.current?.open) setPending(false);
     }
   }
 
@@ -225,7 +237,9 @@ function ProductFormDialog({
           <div className="customer-dialog-actions">
             <Button disabled={pending} onClick={close} type="button">Cancel</Button>
             <Button disabled={pending} type="submit" variant="primary">
-              {pending ? "Saving…" : editing ? "Save changes" : "Create product"}
+              {pending
+                ? <><LoaderCircle aria-hidden="true" className="button-spinner" size={15} /> Saving…</>
+                : editing ? "Save changes" : "Create product"}
             </Button>
           </div>
         </form>
@@ -237,11 +251,13 @@ function ProductFormDialog({
 function ArchiveProductDialog({
   product,
   pending,
+  error,
   onCancel,
   onConfirm,
 }: {
   product: ProductListItem;
   pending: boolean;
+  error: string;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -271,10 +287,13 @@ function ArchiveProductDialog({
         <p className="auth-description">
           This product will be hidden from the active catalog. Existing order records remain unchanged, and the product can still be viewed using the archived filter.
         </p>
+        {error ? <p className="customer-form-message" role="alert">{error}</p> : null}
         <div className="customer-dialog-actions">
           <Button disabled={pending} onClick={onCancel} type="button">Cancel</Button>
           <Button disabled={pending} onClick={onConfirm} type="button" variant="primary">
-            {pending ? "Archiving…" : "Archive product"}
+            {pending
+              ? <><LoaderCircle aria-hidden="true" className="button-spinner" size={15} /> Archiving…</>
+              : "Archive product"}
           </Button>
         </div>
       </Surface>
@@ -311,15 +330,19 @@ export function ProductsManager({
   const [archivingProduct, setArchivingProduct] = useState<ProductListItem | null>(null);
   const [pending, setPending] = useState(false);
   const [archivePending, setArchivePending] = useState(false);
+  const [archiveError, setArchiveError] = useState("");
+  const listRequestRef = useRef(0);
+  const archivePendingRef = useRef(false);
 
   async function refreshList(options?: {
     search?: string;
     archived?: boolean;
     nextOffset?: number;
-  }) {
+  }): Promise<boolean> {
     const search = options?.search ?? appliedSearch;
     const archived = options?.archived ?? includeArchived;
     const nextOffset = options?.nextOffset ?? offset;
+    const requestId = ++listRequestRef.current;
     setError("");
     setPending(true);
     try {
@@ -329,17 +352,22 @@ export function ProductsManager({
         search: search || undefined,
         includeArchived: archived,
       });
+      if (requestId !== listRequestRef.current) return false;
       if ("error" in result) {
         setError(result.error);
-        return;
+        return false;
       }
       setProducts(result.products);
       setHasMore(result.hasMore);
       setSuccessMessage("");
+      return true;
     } catch {
-      setError("Products could not be loaded. Please try again.");
+      if (requestId === listRequestRef.current) {
+        setError("Products could not be loaded. Please try again.");
+      }
+      return false;
     } finally {
-      setPending(false);
+      if (requestId === listRequestRef.current) setPending(false);
     }
   }
 
@@ -359,22 +387,26 @@ export function ProductsManager({
   }
 
   async function confirmArchive() {
-    if (!archivingProduct) return;
+    if (!archivingProduct || archivePendingRef.current) return;
+    archivePendingRef.current = true;
     setArchivePending(true);
+    setArchiveError("");
     try {
       const result = await archiveProductAction({ productId: archivingProduct.id });
       if ("error" in result) {
-        setError(result.error);
-        setArchivingProduct(null);
+        setArchiveError(result.error);
         return;
       }
       const name = archivingProduct.name;
       setArchivingProduct(null);
-      await refreshList();
-      setSuccessMessage(`${name} was archived.`);
+      const refreshed = await refreshList();
+      setSuccessMessage(refreshed
+        ? `${name} was archived.`
+        : `${name} was archived, but the list could not be refreshed.`);
     } catch {
-      setError("The product could not be archived. Please try again.");
+      setArchiveError("The product could not be archived. Please try again.");
     } finally {
+      archivePendingRef.current = false;
       setArchivePending(false);
     }
   }
@@ -424,20 +456,35 @@ export function ProductsManager({
         {successMessage ? (
           <p className="customers-success-message" role="status">{successMessage}</p>
         ) : null}
-        {error ? (
+        {error && products.length === 0 ? (
           <ErrorState
             description={error}
             onRetry={() => void refreshList()}
             title="Products couldn’t be loaded"
           />
-        ) : pending ? (
-          <div aria-busy="true" className="customers-loading" role="status">
-            Loading products…
-          </div>
-        ) : products.length ? (
+        ) : (
           <>
+            {error ? (
+              <div className="list-inline-error" role="alert">
+                <span>{error}</span>
+                <Button onClick={() => void refreshList()} size="small">Try again</Button>
+              </div>
+            ) : null}
+            {pending && products.length ? (
+              <div aria-live="polite" className="list-refreshing" role="status">
+                <LoaderCircle aria-hidden="true" className="inline-spinner" size={15} /> Updating products
+              </div>
+            ) : null}
+            {pending && products.length === 0 ? (
+              <TableSkeleton
+                className="customers-table products-table"
+                headers={["Product", "SKU", "Description", "Unit price", "Added", "Status", ...(canManage ? ["Actions"] : [])]}
+                label="products"
+              />
+            ) : products.length ? (
+              <>
             <div className="table-scroll">
-              <table className="data-table customers-table products-table">
+              <table aria-busy={pending} className="data-table customers-table products-table">
                 <thead>
                   <tr>
                     <th scope="col">Product</th>
@@ -489,7 +536,10 @@ export function ProductsManager({
                                 aria-label={`Archive ${product.name}`}
                                 className="icon-button customer-archive-button"
                                 disabled={pending}
-                                onClick={() => setArchivingProduct(product)}
+                                onClick={() => {
+                                  setArchiveError("");
+                                  setArchivingProduct(product);
+                                }}
                                 type="button"
                               >
                                 <Archive size={14} />
@@ -533,8 +583,8 @@ export function ProductsManager({
                 </Button>
               </div>
             </div>
-          </>
-        ) : (
+              </>
+            ) : (
           <>
             <EmptyState
               action={canManage && offset === 0 ? (
@@ -568,15 +618,22 @@ export function ProductsManager({
               </div>
             ) : null}
           </>
+            )}
+          </>
         )}
       </Surface>
 
       {editingProduct !== undefined ? (
         <ProductFormDialog
           onClose={() => setEditingProduct(undefined)}
-          onSaved={async () => {
-            await refreshList();
-            setSuccessMessage(editingProduct ? "Product changes saved." : "Product created.");
+          onSaved={() => {
+            void refreshList().then((refreshed) => {
+              setSuccessMessage(refreshed
+                ? editingProduct ? "Product changes saved." : "Product created."
+                : editingProduct
+                  ? "Product changes were saved, but the list could not be refreshed."
+                  : "Product was created, but the list could not be refreshed.");
+            });
           }}
           product={editingProduct}
         />
@@ -587,6 +644,7 @@ export function ProductsManager({
           onConfirm={() => void confirmArchive()}
           pending={archivePending}
           product={archivingProduct}
+          error={archiveError}
         />
       ) : null}
     </div>

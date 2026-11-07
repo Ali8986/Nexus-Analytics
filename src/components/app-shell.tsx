@@ -32,7 +32,7 @@ import { logoutAction } from "@/app/actions/auth";
 
 const navigation = [
   { label: "Overview", href: "/", icon: LayoutDashboard },
-  { label: "Orders", href: "/orders", icon: ShoppingBag, count: "12" },
+  { label: "Orders", href: "/orders", icon: ShoppingBag },
   { label: "Customers", href: "/customers", icon: UsersRound },
   { label: "Products", href: "/products", icon: Package },
   { label: "Analytics", href: "/analytics", icon: ChartNoAxesCombined },
@@ -65,9 +65,13 @@ export function AppShell({
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const searchDialogRef = useRef<HTMLDialogElement>(null);
+  const notificationsRef = useRef<HTMLDetailsElement>(null);
+  const profileRef = useRef<HTMLDetailsElement>(null);
   const { toggleTheme } = useTheme();
   const visibleNavigation = useMemo(
     () =>
@@ -111,10 +115,37 @@ export function AppShell({
         event.preventDefault();
         setSearchOpen((open) => !open);
       }
-      if (event.key === "Escape") setSearchOpen(false);
+      if (event.key === "Escape") {
+        setSearchOpen(false);
+        if (notificationsRef.current?.open) {
+          notificationsRef.current.open = false;
+          setNotificationsOpen(false);
+          notificationsRef.current.querySelector("summary")?.focus();
+        }
+        if (profileRef.current?.open) {
+          profileRef.current.open = false;
+          setProfileOpen(false);
+          profileRef.current.querySelector("summary")?.focus();
+        }
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!notificationsRef.current?.contains(event.target as Node)) {
+        if (notificationsRef.current?.open) notificationsRef.current.open = false;
+        setNotificationsOpen(false);
+      }
+      if (!profileRef.current?.contains(event.target as Node)) {
+        if (profileRef.current?.open) profileRef.current.open = false;
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
   }, []);
 
   return (
@@ -152,7 +183,7 @@ export function AppShell({
 
         <div className="sidebar-section-label">WORKSPACE</div>
         <nav aria-label="Main navigation" className="primary-nav">
-          {visibleNavigation.map(({ label, href, icon: Icon, count }) => {
+          {visibleNavigation.map(({ label, href, icon: Icon }) => {
             const active = pathname === href;
             return (
               <Link
@@ -165,7 +196,6 @@ export function AppShell({
               >
                 <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
                 <span className="nav-label">{label}</span>
-                {count ? <span className="nav-count">{count}</span> : null}
               </Link>
             );
           })}
@@ -241,39 +271,61 @@ export function AppShell({
               <Sun className="theme-icon-light" size={18} />
               <Moon className="theme-icon-dark" size={18} />
             </IconButton>
-            <details className="popover-wrap">
-              <summary aria-label="Notifications" className="icon-button notification-button">
+            <details
+              className="popover-wrap"
+              onToggle={(event) => setNotificationsOpen(event.currentTarget.open)}
+              ref={notificationsRef}
+            >
+              <summary aria-expanded={notificationsOpen} aria-label="Notifications" className="icon-button notification-button">
                 <Bell size={18} />
-                <span className="notification-dot" />
               </summary>
               <div className="popover notification-popover">
                 <div className="popover-heading">
                   <strong>Notifications</strong>
-                  <span className="unread-label">2 new</span>
                 </div>
-                <div className="notification-item">
-                  <span className="notification-icon notification-violet"><ShoppingBag size={15} /></span>
-                  <span><strong>New order received</strong><small>Order NX-2847 · 12 min ago</small></span>
-                </div>
-                <div className="notification-item">
-                  <span className="notification-icon notification-amber"><Package size={15} /></span>
-                  <span><strong>Stock running low</strong><small>Field Notes Set · 38 left</small></span>
-                </div>
-                <Link className="popover-footer" href="/orders">View all activity <ArrowUpRight size={14} /></Link>
+                <p className="notification-empty">No notifications to display.</p>
               </div>
             </details>
             <div className="topbar-divider profile-divider" />
-            <details className="popover-wrap profile-wrap">
-              <summary className="profile-trigger">
+            <details
+              className="popover-wrap profile-wrap"
+              onToggle={(event) => setProfileOpen(event.currentTarget.open)}
+              ref={profileRef}
+            >
+              <summary aria-expanded={profileOpen} className="profile-trigger">
                 <span className="profile-avatar">{initials || "U"}</span>
                 <span className="profile-copy"><strong>{userName}</strong><small>{workspaceRole[0]?.toUpperCase()}{workspaceRole.slice(1)}</small></span>
                 <ChevronDown size={14} aria-hidden="true" />
               </summary>
               <div className="popover profile-popover">
                 <div className="profile-popover-head"><span className="profile-avatar">{initials || "U"}</span><span><strong>{userName}</strong><small>{userEmail}</small></span></div>
-                <Link href="/settings" className="popover-link"><Settings2 size={15} /> Profile & settings</Link>
-                <Link href="/workspaces" className="popover-link"><UsersRound size={15} /> Switch workspace</Link>
-                <form action={logoutAction}>
+                <Link
+                  className="popover-link"
+                  href="/settings"
+                  onClick={() => {
+                    if (profileRef.current) profileRef.current.open = false;
+                    setProfileOpen(false);
+                  }}
+                >
+                  <Settings2 size={15} /> Profile & settings
+                </Link>
+                <Link
+                  className="popover-link"
+                  href="/workspaces"
+                  onClick={() => {
+                    if (profileRef.current) profileRef.current.open = false;
+                    setProfileOpen(false);
+                  }}
+                >
+                  <UsersRound size={15} /> Switch workspace
+                </Link>
+                <form
+                  action={logoutAction}
+                  onSubmit={() => {
+                    if (profileRef.current) profileRef.current.open = false;
+                    setProfileOpen(false);
+                  }}
+                >
                   <button className="popover-link profile-signout" type="submit"><LogOut size={15} /> Sign out</button>
                 </form>
               </div>

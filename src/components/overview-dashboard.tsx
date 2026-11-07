@@ -5,12 +5,13 @@ import {
   CalendarDays,
   ChevronDown,
   CircleDollarSign,
+  LoaderCircle,
   Package,
   ShoppingBag,
   UsersRound,
 } from "lucide-react";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -23,8 +24,8 @@ import {
 import { loadOverviewDashboard } from "@/app/actions/overview";
 import { ExportCsvButton } from "@/components/export-csv-button";
 import {
+  Button,
   EmptyState,
-  ErrorState,
   SectionHeading,
   StatusBadge,
   Surface,
@@ -125,26 +126,87 @@ export function OverviewDashboard({
   const [range, setRange] = useState<OverviewRange>(initialData.range);
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
+  const rangeSelectRef = useRef<HTMLDivElement>(null);
+  const rangeTriggerRef = useRef<HTMLButtonElement>(null);
+  const rangeMenuRef = useRef<HTMLDivElement>(null);
+  const rangeRequestRef = useRef(0);
+  const restoreRangeFocusRef = useRef(false);
   const selectedRange =
     rangeOptions.find((option) => option.value === range)?.label ?? "Last 30 days";
 
+  useEffect(() => {
+    if (!rangeMenuOpen) return;
+    rangeMenuRef.current
+      ?.querySelector<HTMLButtonElement>('[aria-selected="true"]')
+      ?.focus();
+  }, [rangeMenuOpen]);
+
+  useEffect(() => {
+    if (isPending || !restoreRangeFocusRef.current) return;
+    rangeTriggerRef.current?.focus();
+    restoreRangeFocusRef.current = false;
+  }, [isPending]);
+
+  useEffect(() => {
+    if (!rangeMenuOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!rangeSelectRef.current?.contains(event.target as Node)) {
+        setRangeMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, [rangeMenuOpen]);
+
+  function handleRangeMenuKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setRangeMenuOpen(false);
+      rangeTriggerRef.current?.focus();
+      return;
+    }
+
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const options = Array.from(
+      rangeMenuRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [],
+    );
+    if (options.length === 0) return;
+    const currentIndex = options.indexOf(document.activeElement as HTMLButtonElement);
+    const selectedIndex = rangeOptions.findIndex((option) => option.value === range);
+    const index = currentIndex < 0 ? selectedIndex : currentIndex;
+    const nextIndex =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? options.length - 1
+          : (index + (event.key === "ArrowDown" ? 1 : options.length - 1)) % options.length;
+    options[nextIndex]?.focus();
+  }
+
   function requestRange(nextRange: OverviewRange) {
-    setRange(nextRange);
-    setData(null);
+    const requestId = ++rangeRequestRef.current;
+    setIsPending(true);
     setLoadError("");
-    startTransition(async () => {
+    void (async () => {
       try {
         const result = await loadOverviewDashboard(nextRange);
+        if (requestId !== rangeRequestRef.current) return;
         if ("error" in result) {
           setLoadError(result.error);
           return;
         }
         setData(result.data);
+        setRange(nextRange);
       } catch {
-        setLoadError("Analytics could not be loaded. Please try again.");
+        if (requestId === rangeRequestRef.current) {
+          setLoadError("Analytics could not be loaded. Please try again.");
+        }
+      } finally {
+        if (requestId === rangeRequestRef.current) setIsPending(false);
       }
-    });
+    })();
   }
 
   const headingDate = data
@@ -178,7 +240,7 @@ export function OverviewDashboard({
           <span />
         </span>
         <span>
-          <strong>Live workspace data</strong> — {data?.workspaceName ?? "Loading workspace"}
+          <strong>Live workspace data</strong> — {data?.workspaceName ?? "Workspace"}
         </span>
       </div>
 
@@ -189,21 +251,33 @@ export function OverviewDashboard({
           <p>Here&apos;s what&apos;s happening in your business.</p>
         </div>
         <div className="page-heading-actions">
-          <div className="range-select-wrap">
+          <div className="range-select-wrap" ref={rangeSelectRef}>
             <button
+              aria-controls="overview-range-options"
               aria-expanded={rangeMenuOpen}
               aria-haspopup="listbox"
               className="button button-secondary range-select"
               disabled={isPending}
               onClick={() => setRangeMenuOpen((open) => !open)}
+              ref={rangeTriggerRef}
               type="button"
             >
               <CalendarDays size={16} aria-hidden="true" />
               {selectedRange}
-              <ChevronDown size={14} aria-hidden="true" />
+              {isPending
+                ? <LoaderCircle aria-hidden="true" className="button-spinner" size={14} />
+                : <ChevronDown size={14} aria-hidden="true" />}
             </button>
             {rangeMenuOpen ? (
-              <div aria-label="Select date range" className="range-menu" role="listbox">
+              <div
+                aria-label="Select date range"
+                className="range-menu"
+                id="overview-range-options"
+                onKeyDown={handleRangeMenuKeyDown}
+                ref={rangeMenuRef}
+                role="listbox"
+                tabIndex={-1}
+              >
                 {rangeOptions.map((option) => (
                   <button
                     aria-selected={range === option.value}
@@ -211,9 +285,14 @@ export function OverviewDashboard({
                     key={option.value}
                     onClick={() => {
                       setRangeMenuOpen(false);
-                      if (option.value !== range) requestRange(option.value);
+                      rangeTriggerRef.current?.focus();
+                      if (option.value !== range) {
+                        restoreRangeFocusRef.current = true;
+                        requestRange(option.value);
+                      }
                     }}
                     role="option"
+                    tabIndex={range === option.value ? 0 : -1}
                     type="button"
                   >
                     {option.label}
@@ -231,17 +310,15 @@ export function OverviewDashboard({
         </div>
       </div>
       {loadError ? (
-        <Surface className="analytics-error-card">
-          <ErrorState
-            description={loadError}
-            onRetry={() => requestRange(range)}
-            title="Analytics unavailable"
-          />
-        </Surface>
-      ) : !data ? (
+        <div className="list-inline-error" role="alert">
+          <span>{loadError} Showing the last successfully loaded reporting period.</span>
+          <Button onClick={() => requestRange(range)} size="small">Try again</Button>
+        </div>
+      ) : null}
+      {!data ? (
         <OverviewLoading />
       ) : (
-        <div aria-busy={isPending}>
+        <div aria-busy={isPending} className={isPending ? "overview-refreshing" : undefined}>
           <div className="kpi-grid">
             <Surface className="kpi-card">
               <div className="kpi-topline">

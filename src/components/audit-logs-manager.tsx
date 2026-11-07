@@ -1,10 +1,17 @@
 "use client";
 
+import { LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { loadAuditLogs } from "@/app/actions/audit-logs";
 import type { AuditLogItem } from "@/lib/services/audit-logs";
 import { formatAuditTimestamp } from "@/lib/audit-logs/presentation";
-import { Button, EmptyState, ErrorState, Surface } from "@/components/ui";
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  Surface,
+  TableSkeleton,
+} from "@/components/ui";
 
 const pageSize = 25;
 
@@ -37,6 +44,7 @@ export function AuditLogsManager({
   const [selectedEvent, setSelectedEvent] = useState<AuditLogItem | null>(null);
   const detailDialog = useRef<HTMLDialogElement>(null);
   const dialogOpen = useRef(false);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     const dialog = detailDialog.current;
@@ -51,10 +59,12 @@ export function AuditLogsManager({
   }, [selectedEvent]);
 
   async function loadPage(nextOffset: number) {
+    const requestId = ++requestIdRef.current;
     setPending(true);
     setError("");
     try {
       const result = await loadAuditLogs({ offset: nextOffset });
+      if (requestId !== requestIdRef.current) return;
       if ("error" in result) {
         setError(result.error);
         return;
@@ -63,9 +73,11 @@ export function AuditLogsManager({
       setHasMore(result.data.hasMore);
       setOffset(nextOffset);
     } catch {
-      setError("Audit logs could not be loaded. Please try again.");
+      if (requestId === requestIdRef.current) {
+        setError("Audit logs could not be loaded. Please try again.");
+      }
     } finally {
-      setPending(false);
+      if (requestId === requestIdRef.current) setPending(false);
     }
   }
 
@@ -92,12 +104,17 @@ export function AuditLogsManager({
             {error ? (
               <div className="audit-inline-error" role="alert">
                 {error}
+                <Button onClick={() => void loadPage(offset)} size="small" type="button">
+                  Try again
+                </Button>
               </div>
             ) : null}
             {pending && events.length === 0 ? (
-              <div aria-busy="true" className="audit-loading" role="status">
-                Loading audit logs…
-              </div>
+              <TableSkeleton
+                className="audit-table"
+                headers={["Timestamp", "Actor", "Action", "Entity", "Entity ID", "Details"]}
+                label="audit logs"
+              />
             ) : events.length === 0 ? (
               <EmptyState
                 description="Workspace activity will appear here as supported actions are recorded."
@@ -152,7 +169,11 @@ export function AuditLogsManager({
                 <div aria-live="polite" className="audit-pagination">
                   <span>
                     Showing {offset + 1}–{offset + events.length} events
-                    {pending ? " · Loading…" : ""}
+                    {pending ? (
+                      <span className="audit-refreshing">
+                        <LoaderCircle aria-hidden="true" className="inline-spinner" size={13} /> Updating
+                      </span>
+                    ) : null}
                   </span>
                   <div>
                     <Button

@@ -140,3 +140,37 @@ export function ErrorState({
 export function Skeleton({ className = "" }: { className?: string }) {
   return <span aria-hidden="true" className={`skeleton ${className}`} />;
 }
+
+export function TableSkeleton({
+  headers,
+  label,
+  rows = 5,
+  className = "",
+}: {
+  headers: string[];
+  label: string;
+  rows?: number;
+  className?: string;
+}) {
+  return (
+    <div aria-busy="true" className="table-scroll table-skeleton-wrap" role="status">
+      <span className="sr-only">Loading {label}</span>
+      <table aria-hidden="true" className={`data-table ${className}`.trim()}>
+        <thead>
+          <tr>{headers.map((header, index) => <th key={`${header}-${index}`} scope="col">{header}</th>)}</tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: rows }, (_, row) => (
+            <tr key={row}>
+              {headers.map((header, column) => (
+                <td key={`${header}-${column}`}>
+                  <Skeleton className={`table-skeleton-line table-skeleton-line-${column % 4}`} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
