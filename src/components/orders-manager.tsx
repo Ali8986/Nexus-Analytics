@@ -6,6 +6,7 @@ import {
   ClipboardList,
   LoaderCircle,
   Plus,
+  Search,
   ShoppingBag,
   X,
 } from "lucide-react";
@@ -44,6 +45,15 @@ type OrderLineInput = { productId: string; quantity: string };
 
 function statusLabel(status: OrderStatus): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+export function filterOrdersForSearch(orders: OrderListItem[], search: string) {
+  const query = search.trim().toLowerCase();
+  if (!query) return orders;
+  return orders.filter((order) =>
+    order.id.slice(0, 8).toLowerCase().includes(query) ||
+    (order.customer_name?.toLowerCase().includes(query) ?? false),
+  );
 }
 
 function formatDate(value: string, timezone: string): string {
@@ -605,6 +615,7 @@ export function OrdersManager({
   const [orders, setOrders] = useState(initialOrders);
   const [error, setError] = useState(initialError);
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
+  const [orderSearch, setOrderSearch] = useState("");
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [pending, setPending] = useState(false);
@@ -612,6 +623,8 @@ export function OrdersManager({
   const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
   const listRequestRef = useRef(0);
+  const normalizedSearch = orderSearch.trim().toLowerCase();
+  const filteredOrders = filterOrdersForSearch(orders, orderSearch);
 
   async function refreshList(options?: { status?: OrderStatus | "all"; nextOffset?: number }) {
     const status = options?.status ?? statusFilter;
@@ -645,6 +658,7 @@ export function OrdersManager({
   function onOrderCreated(orderId: string) {
     setCreating(false);
     setStatusFilter("all");
+    setOrderSearch("");
     setOffset(0);
     void refreshList({ status: "all", nextOffset: 0 });
     setSuccessMessage("Order created. Its saved totals are shown in the order details.");
@@ -681,6 +695,17 @@ export function OrdersManager({
 
       <Surface className="customers-surface">
         <div className="customers-toolbar orders-toolbar">
+          <label className="customers-search order-search">
+            <Search aria-hidden="true" size={16} />
+            <span className="sr-only">Search orders on this page</span>
+            <input
+              aria-label="Search orders on this page"
+              onChange={(event) => setOrderSearch(event.target.value)}
+              placeholder="Search order reference or customer"
+              type="search"
+              value={orderSearch}
+            />
+          </label>
           <label className="customers-archived-toggle order-status-filter">
             <span>Filter by status</span>
             <select
@@ -699,6 +724,7 @@ export function OrdersManager({
               ))}
             </select>
           </label>
+          <span className="order-search-scope">Search covers the loaded page only.</span>
         </div>
 
         {successMessage ? <p className="customers-success-message" role="status">{successMessage}</p> : null}
@@ -723,7 +749,7 @@ export function OrdersManager({
                 headers={["Order", "Customer", "Date", "Items", "Total", "Status", "Details"]}
                 label="orders"
               />
-            ) : orders.length ? (
+            ) : filteredOrders.length ? (
               <>
                 <div className="table-scroll">
                   <table aria-busy={pending} className="data-table orders-table">
@@ -739,7 +765,7 @@ export function OrdersManager({
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map((order) => (
+                  {filteredOrders.map((order) => (
                     <tr key={order.id}>
                       <td><strong className="order-number">#{order.id.slice(0, 8).toUpperCase()}</strong></td>
                       <td>{order.customer_name || <span className="customers-muted">No customer</span>}</td>
@@ -762,7 +788,11 @@ export function OrdersManager({
                   </table>
                 </div>
                 <div className="customers-pagination">
-                  <span>Showing {offset + 1}–{offset + orders.length}</span>
+                  <span>
+                    {normalizedSearch
+                      ? `${filteredOrders.length} matching on this page`
+                      : `Showing ${offset + 1}–${offset + orders.length}`}
+                  </span>
                   <div>
                 <Button
                   disabled={pending || offset === 0}
@@ -791,15 +821,19 @@ export function OrdersManager({
               </>
             ) : (
               <EmptyState
-                action={canManage ? (
+                action={normalizedSearch ? (
+                  <Button onClick={() => setOrderSearch("")} size="small">Clear search</Button>
+                ) : canManage ? (
                   <Button onClick={() => setCreating(true)} variant="primary">
                     <ShoppingBag size={15} /> Create order
                   </Button>
                 ) : undefined}
-                description={statusFilter === "all"
+                description={normalizedSearch
+                  ? "No orders on this page match that reference or customer. Try another search or check another page."
+                  : statusFilter === "all"
                   ? "Orders created in this workspace will appear here."
                   : `No ${statusFilter} orders were found.`}
-                title={statusFilter === "all" ? "No orders yet" : "No matching orders"}
+                title={normalizedSearch || statusFilter !== "all" ? "No matching orders" : "No orders yet"}
               />
             )}
           </>

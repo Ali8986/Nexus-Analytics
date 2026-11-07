@@ -1,15 +1,16 @@
-import { ChartNoAxesCombined } from "lucide-react";
-import { ComingSoonPage } from "@/components/coming-soon-page";
+import { Suspense } from "react";
+import { connection } from "next/server";
+import { AnalyticsDashboard, AnalyticsLoading } from "@/components/analytics-dashboard";
+import { getAnalyticsDashboardData } from "@/lib/analytics/dashboard-data";
 
 export const metadata = { title: "Analytics" };
 
+async function AnalyticsDashboardContent() {
+  await connection();
+  const data = await getAnalyticsDashboardData("30d", "revenue");
+  return <AnalyticsDashboard initialData={data} />;
+}
+
 export default function AnalyticsPage() {
-  return (
-    <ComingSoonPage
-      description="Dig deeper into revenue, product performance, and customer purchasing trends."
-      icon={ChartNoAxesCombined}
-      milestone="Milestone 6"
-      title="Analytics"
-    />
-  );
+  return <Suspense fallback={<AnalyticsLoading />}><AnalyticsDashboardContent /></Suspense>;
 }

@@ -15,7 +15,7 @@ production URLs are supplied here.
 | Output | Next.js default managed output | Do not configure static export or a custom output directory |
 | Runtime | Supabase server clients, server actions, and route handlers require a server runtime | Deploy as a Node.js Next.js app, not static-only hosting |
 | Environment | Two public Supabase variables are validated | Provision production project values and platform environment |
-| Database | 15 ordered migrations are present | Review migration prerequisites and obtain approval before production application |
+| Database | 16 ordered migrations are present | Review migration prerequisites and obtain approval before production application |
 | Authentication email | Local SMTP is not configured for production delivery | Configure and verify a production email provider |
 
 ## Prerequisites
@@ -109,7 +109,7 @@ server-side workspace membership checks and database RLS remain authoritative.
 
 ## Migration history and production order
 
-The repository contains these 15 timestamp-ordered migrations. Apply them in
+The repository contains these 16 timestamp-ordered migrations. Apply them in
 the order shown; do not cherry-pick later migrations or edit already-applied
 migrations:
 
@@ -139,6 +139,10 @@ migrations:
 14. `20261104160000_expose_order_rpcs.sql` — authenticated order wrappers.
 15. `20261104170000_expose_audit_log_read_rpc.sql` — authenticated
     RLS-constrained audit read wrapper.
+16. `20261107100000_workspace_settings_updates.sql` — owner/admin workspace
+     settings updates through an authorized database function. The Settings
+     page's workspace save action depends on this migration; verify its applied
+     status in the target project before deploying that feature.
 
 ### Migration preflight risks
 

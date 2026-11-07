@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   requireWorkspaceRole: vi.fn(),
   createClient: vi.fn(),
   rpc: vi.fn(),
+  from: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -19,12 +20,13 @@ import { listAuditLogs } from "@/lib/services/audit-logs";
 
 const workspaceId = "e8db3392-ccda-46cc-9a15-faf902420f87";
 const eventId = "d12412f9-d7f5-4e8d-a5a2-f1bdbb804738";
+const customerId = "a12412f9-d7f5-4e8d-a5a2-f1bdbb804739";
 const eventRow = {
   id: eventId,
   actor_user_id: null,
   action: "created",
   entity_type: "workspace",
-  entity_id: eventId,
+  entity_id: workspaceId,
   metadata: { name: "Workspace", nested: { api_key: "redacted", region: "west" } },
   created_at: "2026-11-04T12:00:00.000Z",
 };
@@ -34,16 +36,17 @@ describe("audit log service", () => {
     vi.clearAllMocks();
     mocks.requireWorkspaceRole.mockResolvedValue({
       id: workspaceId,
+      name: "Nexus Test Workspace",
       role: "owner",
       reportingTimezone: "UTC",
     });
-    mocks.createClient.mockResolvedValue({ rpc: mocks.rpc });
+    mocks.createClient.mockResolvedValue({ rpc: mocks.rpc, from: mocks.from });
     mocks.rpc.mockResolvedValue({ data: [eventRow], error: null });
   });
 
   it("uses the verified workspace, fixed page size, and pagination offset", async () => {
     await expect(listAuditLogs(workspaceId, 25)).resolves.toMatchObject({
-      events: [{ id: eventId }],
+      events: [{ id: eventId, resourceName: "Nexus Test Workspace" }],
       hasMore: false,
       reportingTimezone: "UTC",
     });
@@ -111,6 +114,25 @@ describe("audit log service", () => {
     const result = await listAuditLogs(workspaceId, 0);
     expect(result.events).toHaveLength(25);
     expect(result.hasMore).toBe(true);
+  });
+
+  it("resolves customer resource names with a workspace-scoped read", async () => {
+    const query = { select: vi.fn(), eq: vi.fn(), in: vi.fn() };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    query.in.mockResolvedValue({ data: [{ id: customerId, name: "Avery Smith" }], error: null });
+    mocks.from.mockReturnValue(query);
+    mocks.rpc.mockResolvedValueOnce({
+      data: [{ ...eventRow, entity_type: "customer", entity_id: customerId }],
+      error: null,
+    });
+
+    await expect(listAuditLogs(workspaceId, 0)).resolves.toMatchObject({
+      events: [{ resourceName: "Avery Smith" }],
+    });
+    expect(mocks.from).toHaveBeenCalledWith("customers");
+    expect(query.eq).toHaveBeenCalledWith("workspace_id", workspaceId);
+    expect(query.in).toHaveBeenCalledWith("id", [customerId]);
   });
 
   it("rejects invalid offsets before authorization or database access", async () => {

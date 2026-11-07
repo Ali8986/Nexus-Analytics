@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 import { AppError } from "@/lib/errors/app-error";
 import { sanitizeAuditMetadata } from "@/lib/audit-logs/presentation";
+import { raiseDatabaseError } from "@/lib/services/shared";
 import { createClient } from "@/lib/supabase/server";
 import { recordIdSchema } from "@/lib/validation/schemas";
 import { requireWorkspaceRole } from "@/lib/workspaces/context";
@@ -27,6 +28,7 @@ export type AuditLogItem = {
   action: string;
   entityType: string;
   entityId: string | null;
+  resourceName: string | null;
   metadata: ReturnType<typeof sanitizeAuditMetadata>;
   createdAt: string;
 };
@@ -60,16 +62,68 @@ export async function listAuditLogs(
   if (!parsedRows.success) throw new AppError("DATABASE", parsedRows.error);
 
   const rows = parsedRows.data;
+  const events = rows.slice(0, auditLogPageSize);
+  const customerIds = [...new Set(events
+    .filter((row) => row.entity_type === "customer" && row.entity_id)
+    .map((row) => row.entity_id!))];
+  const productIds = [...new Set(events
+    .filter((row) => row.entity_type === "product" && row.entity_id)
+    .map((row) => row.entity_id!))];
+  const [customers, products] = await Promise.all([
+    customerIds.length
+      ? supabase
+          .from("customers")
+          .select("id, name")
+          .eq("workspace_id", workspace.id)
+          .in("id", customerIds)
+      : Promise.resolve({ data: [], error: null }),
+    productIds.length
+      ? supabase
+          .from("products")
+          .select("id, name, sku")
+          .eq("workspace_id", workspace.id)
+          .in("id", productIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (customers.error) raiseDatabaseError(customers.error);
+  if (products.error) raiseDatabaseError(products.error);
+
+  const customerRows = z.array(z.object({ id: recordIdSchema, name: z.string() }))
+    .safeParse(customers.data ?? []);
+  const productRows = z.array(z.object({
+    id: recordIdSchema,
+    name: z.string(),
+    sku: z.string(),
+  })).safeParse(products.data ?? []);
+  if (!customerRows.success || !productRows.success) {
+    throw new AppError("DATABASE", !customerRows.success ? customerRows.error : productRows.error);
+  }
+  const customerNames = new Map(customerRows.data.map((customer) => [customer.id, customer.name]));
+  const productNames = new Map(productRows.data.map((product) => [
+    product.id,
+    `${product.name} (${product.sku})`,
+  ]));
+
   return {
-    events: rows.slice(0, auditLogPageSize).map((row) => ({
-      id: row.id,
-      actorUserId: row.actor_user_id,
-      action: row.action,
-      entityType: row.entity_type,
-      entityId: row.entity_id,
-      metadata: sanitizeAuditMetadata(row.metadata),
-      createdAt: row.created_at,
-    })),
+    events: events.map((row) => {
+      const resourceName = row.entity_type === "customer" && row.entity_id
+        ? customerNames.get(row.entity_id) ?? null
+        : row.entity_type === "product" && row.entity_id
+          ? productNames.get(row.entity_id) ?? null
+          : row.entity_type === "workspace" && row.entity_id === workspace.id
+            ? workspace.name
+            : null;
+      return {
+        id: row.id,
+        actorUserId: row.actor_user_id,
+        action: row.action,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        resourceName,
+        metadata: sanitizeAuditMetadata(row.metadata),
+        createdAt: row.created_at,
+      };
+    }),
     hasMore: rows.length > auditLogPageSize,
     reportingTimezone: workspace.reportingTimezone,
   };

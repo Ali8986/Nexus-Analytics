@@ -158,6 +158,19 @@ describe("order status confirmation", () => {
     expect(container.querySelector(".orders-table tbody")?.textContent).not.toContain("Processing");
   });
 
+  it("searches visible order references and customer names on the loaded page", async () => {
+    const { filterOrdersForSearch } = await import("@/components/orders-manager");
+    const search = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Search orders on this page"]',
+    );
+    expect(search).not.toBeNull();
+    expect(filterOrdersForSearch([listOrder], "avery")).toEqual([listOrder]);
+    expect(filterOrdersForSearch([listOrder], orderId.slice(0, 8).toUpperCase())).toEqual([listOrder]);
+    expect(filterOrdersForSearch([listOrder], "no matching order")).toEqual([]);
+    expect(filterOrdersForSearch([listOrder], " ")).toEqual([listOrder]);
+    expect(actionMocks.loadOrders).not.toHaveBeenCalled();
+  });
+
   it("keeps the dialog open with a retryable error after a failed response", async () => {
     actionMocks.updateOrderStatusAction.mockResolvedValueOnce({
       error: "The order status could not be changed. Please try again.",
