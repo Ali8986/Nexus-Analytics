@@ -3661,7 +3661,7 @@ kbd {
   background: transparent;
   color: var(--foreground);
   box-shadow: var(--shadow-card);
-  margin: 0 auto;
+  margin: auto;
 }
 
 .confirmation-dialog::backdrop {
