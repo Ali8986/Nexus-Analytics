@@ -76,9 +76,9 @@ body {
 
 html.theme-transition,
 html.theme-transition :where(body, body *) {
-  transition-property: background-color, border-color, color;
-  transition-duration: 160ms;
-  transition-timing-function: ease;
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+  transition-duration: 280ms;
+  transition-timing-function: cubic-bezier(0.2, 0.65, 0.3, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -171,6 +171,27 @@ a {
   border-right: 1px solid var(--border);
   background: var(--sidebar-background);
   transition: width 160ms ease, background-color 160ms ease;
+}
+
+.sidebar-header {
+  flex: 0 0 auto;
+}
+
+.sidebar-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.sidebar-footer {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
 }
 
 .brand {
@@ -3359,6 +3380,25 @@ kbd {
   margin-top: 25px;
 }
 
+.auth-pending-fields {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.auth-pending-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .auth-field {
   display: flex;
   flex-direction: column;
@@ -3574,6 +3614,18 @@ kbd {
   background: var(--surface);
 }
 
+.workspace-create-link {
+  margin-top: 18px;
+  text-decoration: none;
+}
+
+.workspace-retry-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 18px;
+}
+
 .workspace-option-copy {
   display: flex;
   min-width: 0;
@@ -3598,6 +3650,56 @@ kbd {
 .workspace-loader {
   margin-bottom: 16px;
   color: var(--accent);
+}
+
+.confirmation-dialog {
+  width: min(440px, calc(100vw - 32px));
+  max-width: none;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--foreground);
+  box-shadow: var(--shadow-card);
+}
+
+.confirmation-dialog::backdrop {
+  background: rgb(15 17 24 / 48%);
+  backdrop-filter: blur(3px);
+}
+
+.confirmation-dialog-card {
+  padding: 27px;
+  border-radius: inherit;
+  background: var(--surface);
+}
+
+.confirmation-dialog-card h2 {
+  margin: 8px 0;
+  color: var(--foreground);
+  font-size: 20px;
+  letter-spacing: -0.5px;
+}
+
+.confirmation-dialog-card .form-message {
+  margin-top: 16px;
+}
+
+.confirmation-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.button-danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: white;
+}
+
+.button-danger:hover:not(:disabled) {
+  filter: brightness(0.95);
 }
 
 @media (max-width: 520px) {
@@ -4543,6 +4645,12 @@ kbd {
   outline: 0;
   background: var(--surface-hover);
   color: var(--foreground);
+}
+
+.settings-nav a.settings-nav-active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-weight: 630;
 }
 
 .settings-nav a:focus-visible {

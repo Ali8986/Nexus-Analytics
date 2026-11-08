@@ -6,10 +6,12 @@ import {
   archiveCustomer,
   createCustomer,
   listCustomers,
+  unarchiveCustomer,
   updateCustomer,
 } from "@/lib/services/customers";
 import type { CustomerRecord } from "@/lib/services/types";
 import {
+  customerIdInputSchema,
   customerInputSchema,
   customerListSchema,
   customerUpdateSchema,
@@ -148,6 +150,22 @@ export async function archiveCustomerAction(
   try {
     const workspace = await getSelectedWorkspace();
     await archiveCustomer(workspace.id, parsed.data.customerId);
+    revalidatePath("/customers");
+    return { success: true };
+  } catch (error) {
+    return mutationError(error);
+  }
+}
+
+export async function unarchiveCustomerAction(
+  input: unknown,
+): Promise<CustomerMutationResult> {
+  const parsed = customerIdInputSchema.safeParse(input);
+  if (!parsed.success) return firstValidationError(parsed.error);
+
+  try {
+    const workspace = await getSelectedWorkspace();
+    await unarchiveCustomer(workspace.id, parsed.data.customerId);
     revalidatePath("/customers");
     return { success: true };
   } catch (error) {

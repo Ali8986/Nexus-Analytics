@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   createProduct: vi.fn(),
   updateProduct: vi.fn(),
   archiveProduct: vi.fn(),
+  unarchiveProduct: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
@@ -24,12 +25,14 @@ vi.mock("@/lib/services/products", () => ({
   createProduct: mocks.createProduct,
   updateProduct: mocks.updateProduct,
   archiveProduct: mocks.archiveProduct,
+  unarchiveProduct: mocks.unarchiveProduct,
 }));
 
 import {
   archiveProductAction,
   createProductAction,
   loadProducts,
+  unarchiveProductAction,
   updateProductAction,
 } from "@/app/actions/products";
 
@@ -57,6 +60,7 @@ describe("product server actions", () => {
     mocks.createProduct.mockResolvedValue(productId);
     mocks.updateProduct.mockResolvedValue(productId);
     mocks.archiveProduct.mockResolvedValue(productId);
+    mocks.unarchiveProduct.mockResolvedValue(productId);
   });
 
   it("lists products for the verified workspace with search, pagination, and archived filters", async () => {
@@ -102,7 +106,7 @@ describe("product server actions", () => {
     expect(mocks.createProduct).not.toHaveBeenCalled();
   });
 
-  it("creates, updates, and archives using the selected workspace", async () => {
+  it("creates, updates, archives, and restores using the selected workspace", async () => {
     const input = {
       name: "Desk Lamp",
       sku: "LAMP-001",
@@ -114,6 +118,7 @@ describe("product server actions", () => {
     await expect(updateProductAction({ ...input, productId }))
       .resolves.toEqual({ success: true });
     await expect(archiveProductAction({ productId })).resolves.toEqual({ success: true });
+    await expect(unarchiveProductAction({ productId })).resolves.toEqual({ success: true });
 
     expect(mocks.createProduct).toHaveBeenCalledWith(selectedWorkspaceId, input);
     expect(mocks.updateProduct).toHaveBeenCalledWith(selectedWorkspaceId, {
@@ -121,7 +126,15 @@ describe("product server actions", () => {
       productId,
     });
     expect(mocks.archiveProduct).toHaveBeenCalledWith(selectedWorkspaceId, productId);
-    expect(mocks.revalidatePath).toHaveBeenCalledTimes(3);
+    expect(mocks.unarchiveProduct).toHaveBeenCalledWith(selectedWorkspaceId, productId);
+    expect(mocks.revalidatePath).toHaveBeenCalledTimes(4);
+  });
+
+  it("validates restore input before resolving a workspace", async () => {
+    await expect(unarchiveProductAction({ productId: "not-an-id" }))
+      .resolves.toMatchObject({ error: expect.any(String) });
+    expect(mocks.getSelectedWorkspaceId).not.toHaveBeenCalled();
+    expect(mocks.unarchiveProduct).not.toHaveBeenCalled();
   });
 
   it("returns safe authorization failures and propagates unexpected errors", async () => {

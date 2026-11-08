@@ -6,10 +6,12 @@ import {
   archiveProduct,
   createProduct,
   listProducts,
+  unarchiveProduct,
   updateProduct,
 } from "@/lib/services/products";
 import type { ProductRecord } from "@/lib/services/types";
 import {
+  productIdInputSchema,
   productInputSchema,
   productListSchema,
   productUpdateSchema,
@@ -130,6 +132,22 @@ export async function archiveProductAction(
   try {
     const workspace = await getSelectedWorkspace();
     await archiveProduct(workspace.id, parsed.data.productId);
+    revalidatePath("/products");
+    return { success: true };
+  } catch (error) {
+    return mutationError(error);
+  }
+}
+
+export async function unarchiveProductAction(
+  input: unknown,
+): Promise<ProductMutationResult> {
+  const parsed = productIdInputSchema.safeParse(input);
+  if (!parsed.success) return firstValidationError(parsed.error);
+
+  try {
+    const workspace = await getSelectedWorkspace();
+    await unarchiveProduct(workspace.id, parsed.data.productId);
     revalidatePath("/products");
     return { success: true };
   } catch (error) {

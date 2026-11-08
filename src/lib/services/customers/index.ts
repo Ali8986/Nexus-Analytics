@@ -115,3 +115,15 @@ export async function archiveCustomer(workspaceId: string, customerId: string): 
   if (error) raiseDatabaseError(error);
   return parseRpcId(data);
 }
+
+export async function unarchiveCustomer(workspaceId: string, customerId: string): Promise<string> {
+  const id = parseInput(customerIdInputSchema, { customerId }).customerId;
+  const workspace = await requireWorkspaceRole(workspaceId, ["owner", "admin"]);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("unarchive_customer", {
+    p_workspace_id: workspace.id,
+    p_customer_id: id,
+  });
+  if (error) raiseDatabaseError(error);
+  return parseRpcId(data);
+}

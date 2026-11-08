@@ -1,7 +1,7 @@
 "use client";
 
 import { LoaderCircle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { selectWorkspaceAction } from "@/app/actions/workspaces";
 import type { WorkspaceSummary } from "@/lib/workspaces/list";
 
@@ -13,13 +13,19 @@ export function AutoSelectWorkspace({
   const [failed, setFailed] = useState(false);
   const started = useRef(false);
 
-  useEffect(() => {
-    if (started.current) return;
+  const openWorkspace = useCallback(() => {
+    setFailed(false);
     started.current = true;
     const formData = new FormData();
     formData.set("workspaceId", workspace.id);
     void selectWorkspaceAction(formData).catch(() => setFailed(true));
   }, [workspace.id]);
+
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    openWorkspace();
+  }, [openWorkspace]);
 
   return (
     <main className="workspace-selection-page">
@@ -27,8 +33,14 @@ export function AutoSelectWorkspace({
         {failed ? (
           <>
             <p className="form-message form-message-error" role="alert">
-              We couldn’t open your workspace. Please refresh and try again.
+              We couldn’t open your workspace. Try again or return to workspace selection.
             </p>
+            <div className="workspace-retry-actions">
+              <button className="button button-primary" onClick={openWorkspace} type="button">
+                Try again
+              </button>
+              <a className="text-link" href="/workspaces">Choose a workspace</a>
+            </div>
           </>
         ) : (
           <>

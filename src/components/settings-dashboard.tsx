@@ -89,6 +89,7 @@ export function SettingsDashboard({ initialData }: { initialData: SettingsDashbo
   const [workspacePending, setWorkspacePending] = useState(false);
   const [profileFeedback, setProfileFeedback] = useState<Feedback>(null);
   const [workspaceFeedback, setWorkspaceFeedback] = useState<Feedback>(null);
+  const [activeSection, setActiveSection] = useState("profile");
   const profileBusy = useRef(false);
   const workspaceBusy = useRef(false);
   const canManageWorkspace = initialData.role === "owner" || initialData.role === "admin";
@@ -97,6 +98,35 @@ export function SettingsDashboard({ initialData }: { initialData: SettingsDashbo
     workspaceName !== savedWorkspace.name ||
     reportingCurrency !== savedWorkspace.reportingCurrency ||
     reportingTimezone !== savedWorkspace.reportingTimezone;
+
+  useEffect(() => {
+    const sectionIds = ["profile", "workspace", "regional", "appearance", "security"];
+    const updateActiveSection = () => {
+      const documentHeight = document.documentElement.scrollHeight;
+      if (
+        documentHeight > window.innerHeight &&
+        window.scrollY + window.innerHeight >= documentHeight - 2
+      ) {
+        setActiveSection("security");
+        return;
+      }
+
+      const currentSection = sectionIds
+        .map((id) => document.getElementById(id))
+        .filter((element): element is HTMLElement => element !== null)
+        .filter((element) => element.getBoundingClientRect().top <= 160)
+        .at(-1);
+      setActiveSection(currentSection?.id ?? "profile");
+    };
+
+    updateActiveSection();
+    window.addEventListener("scroll", updateActiveSection, { passive: true });
+    window.addEventListener("resize", updateActiveSection);
+    return () => {
+      window.removeEventListener("scroll", updateActiveSection);
+      window.removeEventListener("resize", updateActiveSection);
+    };
+  }, []);
 
   useEffect(() => {
     const hasUnsavedChanges = () => profileDirty || workspaceDirty;
@@ -221,11 +251,11 @@ export function SettingsDashboard({ initialData }: { initialData: SettingsDashbo
 
       <div className="settings-layout">
         <nav aria-label="Settings sections" className="settings-nav">
-          <a href="#profile"><UserRound aria-hidden="true" size={16} /> My Profile</a>
-          <a href="#workspace"><Building2 aria-hidden="true" size={16} /> Workspace</a>
-          <a href="#regional"><Globe2 aria-hidden="true" size={16} /> Regional Preferences</a>
-          <a href="#appearance"><Sun aria-hidden="true" size={16} /> Appearance</a>
-          <a href="#security"><ShieldCheck aria-hidden="true" size={16} /> Account & Security</a>
+          <a aria-current={activeSection === "profile" ? "location" : undefined} className={activeSection === "profile" ? "settings-nav-active" : undefined} href="#profile" onClick={() => setActiveSection("profile")}><UserRound aria-hidden="true" size={16} /> My Profile</a>
+          <a aria-current={activeSection === "workspace" ? "location" : undefined} className={activeSection === "workspace" ? "settings-nav-active" : undefined} href="#workspace" onClick={() => setActiveSection("workspace")}><Building2 aria-hidden="true" size={16} /> Workspace</a>
+          <a aria-current={activeSection === "regional" ? "location" : undefined} className={activeSection === "regional" ? "settings-nav-active" : undefined} href="#regional" onClick={() => setActiveSection("regional")}><Globe2 aria-hidden="true" size={16} /> Regional Preferences</a>
+          <a aria-current={activeSection === "appearance" ? "location" : undefined} className={activeSection === "appearance" ? "settings-nav-active" : undefined} href="#appearance" onClick={() => setActiveSection("appearance")}><Sun aria-hidden="true" size={16} /> Appearance</a>
+          <a aria-current={activeSection === "security" ? "location" : undefined} className={activeSection === "security" ? "settings-nav-active" : undefined} href="#security" onClick={() => setActiveSection("security")}><ShieldCheck aria-hidden="true" size={16} /> Account & Security</a>
         </nav>
 
         <div className="settings-sections">

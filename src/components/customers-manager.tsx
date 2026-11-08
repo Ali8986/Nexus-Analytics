@@ -9,6 +9,7 @@ import {
   MapPin,
   Pencil,
   Plus,
+  RotateCcw,
   Search,
   X,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import {
   archiveCustomerAction,
   createCustomerAction,
   loadCustomers,
+  unarchiveCustomerAction,
   updateCustomerAction,
 } from "@/app/actions/customers";
 import type { CustomerListItem } from "@/app/actions/customers";
@@ -360,8 +362,11 @@ export function CustomersManager({
   const [pending, setPending] = useState(false);
   const [archivePending, setArchivePending] = useState(false);
   const [archiveError, setArchiveError] = useState("");
+  const [restorePending, setRestorePending] = useState(false);
+  const [restoreError, setRestoreError] = useState("");
   const listRequestRef = useRef(0);
   const archivePendingRef = useRef(false);
+  const restorePendingRef = useRef(false);
 
   async function refreshList(options?: {
     search?: string;
@@ -440,6 +445,31 @@ export function CustomersManager({
     }
   }
 
+  async function restoreCustomer(customer: CustomerListItem) {
+    if (restorePendingRef.current) return;
+    restorePendingRef.current = true;
+    setRestorePending(true);
+    setRestoreError("");
+    try {
+      const result = await unarchiveCustomerAction({ customerId: customer.id });
+      if ("error" in result) {
+        setRestoreError(result.error);
+        return;
+      }
+      setIncludeArchived(false);
+      setOffset(0);
+      const refreshed = await refreshList({ archived: false, nextOffset: 0 });
+      setSuccessMessage(refreshed
+        ? `${customer.name} was restored.`
+        : `${customer.name} was restored, but the list could not be refreshed.`);
+    } catch {
+      setRestoreError("The customer could not be restored. Please try again.");
+    } finally {
+      restorePendingRef.current = false;
+      setRestorePending(false);
+    }
+  }
+
   return (
     <div className="customers-page">
       <div className="customers-page-heading">
@@ -488,6 +518,7 @@ export function CustomersManager({
         {successMessage ? (
           <p className="customers-success-message" role="status">{successMessage}</p>
         ) : null}
+        {restoreError ? <p className="list-inline-error" role="alert">{restoreError}</p> : null}
         {error && customers.length === 0 ? (
           <ErrorState
             description={error}
@@ -567,29 +598,41 @@ export function CustomersManager({
                         {canManage ? (
                           <td>
                             <div className="customer-row-actions">
-                              <button
-                                aria-label={`Edit ${customer.name}`}
-                                className="icon-button"
-                                disabled={pending}
-                                onClick={() => setEditingCustomer(customer)}
-                                type="button"
-                              >
-                                <Pencil size={14} />
-                              </button>
                               {!customer.archived_at ? (
+                                <>
+                                  <button
+                                    aria-label={`Edit ${customer.name}`}
+                                    className="icon-button"
+                                    disabled={pending || restorePending}
+                                    onClick={() => setEditingCustomer(customer)}
+                                    type="button"
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
+                                  <button
+                                    aria-label={`Archive ${customer.name}`}
+                                    className="icon-button customer-archive-button"
+                                    disabled={pending || restorePending}
+                                    onClick={() => {
+                                      setArchiveError("");
+                                      setArchivingCustomer(customer);
+                                    }}
+                                    type="button"
+                                  >
+                                    <Archive size={14} />
+                                  </button>
+                                </>
+                              ) : (
                                 <button
-                                  aria-label={`Archive ${customer.name}`}
-                                  className="icon-button customer-archive-button"
-                                  disabled={pending}
-                                  onClick={() => {
-                                    setArchiveError("");
-                                    setArchivingCustomer(customer);
-                                  }}
+                                  aria-label={`Restore ${customer.name}`}
+                                  className="icon-button"
+                                  disabled={pending || restorePending}
+                                  onClick={() => void restoreCustomer(customer)}
                                   type="button"
                                 >
-                                  <Archive size={14} />
+                                  <RotateCcw size={14} />
                                 </button>
-                              ) : null}
+                              )}
                             </div>
                           </td>
                         ) : null}

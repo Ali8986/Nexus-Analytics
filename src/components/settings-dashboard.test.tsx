@@ -129,4 +129,14 @@ describe("settings dashboard", () => {
     await act(async () => container.querySelector<HTMLInputElement>('input[name="theme"][value="dark"]')?.click());
     expect(mocks.setPreference).toHaveBeenCalledWith("dark");
   });
+
+  it("tracks the selected section when the settings section link is chosen", async () => {
+    await render();
+    const workspaceLink = container.querySelector<HTMLAnchorElement>('.settings-nav a[href="#workspace"]');
+
+    await act(async () => workspaceLink?.click());
+
+    expect(workspaceLink?.getAttribute("aria-current")).toBe("location");
+    expect(workspaceLink?.classList.contains("settings-nav-active")).toBe(true);
+  });
 });

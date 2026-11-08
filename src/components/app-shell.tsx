@@ -16,6 +16,7 @@ import {
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  Plus,
   Search,
   Settings2,
   ShoppingBag,
@@ -25,10 +26,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { useTheme } from "@/components/theme-provider";
 import { IconButton } from "@/components/ui";
-import { logoutAction } from "@/app/actions/auth";
+import { logoutAction, type LogoutState } from "@/app/actions/auth";
 
 const navigation = [
   { label: "Overview", href: "/", icon: LayoutDashboard },
@@ -37,6 +39,8 @@ const navigation = [
   { label: "Products", href: "/products", icon: Package },
   { label: "Analytics", href: "/analytics", icon: ChartNoAxesCombined },
 ];
+
+const initialLogoutState: LogoutState = {};
 
 const routeTitles: Record<string, { title: string; breadcrumb?: string }> = {
   "/": { title: "Overview" },
@@ -47,6 +51,15 @@ const routeTitles: Record<string, { title: string; breadcrumb?: string }> = {
   "/audit-logs": { title: "Audit Logs", breadcrumb: "Review workspace activity" },
   "/settings": { title: "Settings", breadcrumb: "Manage your workspace" },
 };
+
+function LogoutSubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button className="button button-danger" disabled={pending} type="submit">
+      {pending ? "Signing out…" : "Sign out"}
+    </button>
+  );
+}
 
 export function AppShell({
   children,
@@ -61,15 +74,21 @@ export function AppShell({
   userName: string;
   userEmail: string;
 }) {
+  const [logoutState, dispatchLogout, logoutPending] = useActionState(
+    logoutAction,
+    initialLogoutState,
+  );
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const searchDialogRef = useRef<HTMLDialogElement>(null);
+  const logoutDialogRef = useRef<HTMLDialogElement>(null);
   const notificationsRef = useRef<HTMLDetailsElement>(null);
   const profileRef = useRef<HTMLDetailsElement>(null);
   const { toggleTheme } = useTheme();
@@ -106,6 +125,13 @@ export function AppShell({
   }, [searchOpen]);
 
   useEffect(() => {
+    const dialog = logoutDialogRef.current;
+    if (!dialog) return;
+    if (logoutOpen && !dialog.open) dialog.showModal();
+    if (!logoutOpen && dialog.open) dialog.close();
+  }, [logoutOpen]);
+
+  useEffect(() => {
     if (searchOpen) searchRef.current?.focus();
   }, [searchOpen]);
 
@@ -117,6 +143,7 @@ export function AppShell({
       }
       if (event.key === "Escape") {
         setSearchOpen(false);
+        if (!logoutPending) setLogoutOpen(false);
         if (notificationsRef.current?.open) {
           notificationsRef.current.open = false;
           setNotificationsOpen(false);
@@ -131,7 +158,7 @@ export function AppShell({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [logoutPending]);
 
   useEffect(() => {
     const closeOnOutsideClick = (event: PointerEvent) => {
@@ -159,78 +186,93 @@ export function AppShell({
         />
       ) : null}
       <aside className={`sidebar${mobileOpen ? " sidebar-mobile-open" : ""}`}>
-        <Link aria-label="Nexus Analytics home" className="brand" href="/">
-          <span className="brand-mark" aria-hidden="true">
-            <Activity size={19} strokeWidth={2.2} />
-          </span>
-          <span className="brand-name">
-            nexus<span>analytics</span>
-          </span>
-        </Link>
+        <div className="sidebar-header">
+          <Link aria-label="Nexus Analytics home" className="brand" href="/">
+            <span className="brand-mark" aria-hidden="true">
+              <Activity size={19} strokeWidth={2.2} />
+            </span>
+            <span className="brand-name">
+              nexus<span>analytics</span>
+            </span>
+          </Link>
 
-        <Link
-          aria-label={`Current workspace: ${workspaceName}. Switch workspace`}
-          className="workspace-switcher"
-          href="/workspaces"
-        >
-          <span className="workspace-avatar">{workspaceName[0]?.toUpperCase() ?? "W"}</span>
-          <span className="workspace-copy">
-            <strong>{workspaceName}</strong>
-            <span>{workspaceRole[0]?.toUpperCase()}{workspaceRole.slice(1)}</span>
-          </span>
-          <ChevronDown size={14} aria-hidden="true" />
-        </Link>
+          <Link
+            aria-label={`Current workspace: ${workspaceName}. Switch workspace`}
+            className="workspace-switcher"
+            href="/workspaces"
+          >
+            <span className="workspace-avatar">{workspaceName[0]?.toUpperCase() ?? "W"}</span>
+            <span className="workspace-copy">
+              <strong>{workspaceName}</strong>
+              <span>{workspaceRole[0]?.toUpperCase()}{workspaceRole.slice(1)}</span>
+            </span>
+            <ChevronDown size={14} aria-hidden="true" />
+          </Link>
+        </div>
 
-        <div className="sidebar-section-label">WORKSPACE</div>
-        <nav aria-label="Main navigation" className="primary-nav">
-          {visibleNavigation.map(({ label, href, icon: Icon }) => {
-            const active = pathname === href;
-            return (
-              <Link
-                aria-current={active ? "page" : undefined}
-                className={`nav-link${active ? " nav-link-active" : ""}`}
-                href={href}
-                onClick={() => setMobileOpen(false)}
-                key={href}
-                title={collapsed ? label : undefined}
-              >
-                <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
-                <span className="nav-label">{label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+        <div className="sidebar-scroll">
+          <div className="sidebar-section-label">WORKSPACE</div>
+          <nav aria-label="Main navigation" className="primary-nav">
+            {visibleNavigation.map(({ label, href, icon: Icon }) => {
+              const active = pathname === href;
+              return (
+                <Link
+                  aria-current={active ? "page" : undefined}
+                  className={`nav-link${active ? " nav-link-active" : ""}`}
+                  href={href}
+                  onClick={() => setMobileOpen(false)}
+                  key={href}
+                  title={collapsed ? label : undefined}
+                >
+                  <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+                  <span className="nav-label">{label}</span>
+                </Link>
+              );
+            })}
+            <Link
+              className="nav-link"
+              href="/workspaces/new"
+              onClick={() => setMobileOpen(false)}
+              title={collapsed ? "Create workspace" : undefined}
+            >
+              <Plus size={18} strokeWidth={1.8} aria-hidden="true" />
+              <span className="nav-label">Create workspace</span>
+            </Link>
+          </nav>
 
-        <div className="sidebar-spacer" />
-        <div className="sidebar-note">
-          <span className="sidebar-note-icon" aria-hidden="true">
-            <Activity size={16} />
-          </span>
-          <div className="sidebar-note-copy">
-            <strong>Workspace connected</strong>
-            <span>Live workspace data</span>
+          <div className="sidebar-note">
+            <span className="sidebar-note-icon" aria-hidden="true">
+              <Activity size={16} />
+            </span>
+            <div className="sidebar-note-copy">
+              <strong>Workspace connected</strong>
+              <span>Live workspace data</span>
+            </div>
           </div>
         </div>
-        <Link
-          aria-current={pathname === "/settings" ? "page" : undefined}
-          className={`nav-link settings-link${pathname === "/settings" ? " nav-link-active" : ""}`}
-          href="/settings"
-          onClick={() => setMobileOpen(false)}
-          title={collapsed ? "Settings" : undefined}
-        >
-          <Settings2 size={18} strokeWidth={1.8} aria-hidden="true" />
-          <span className="nav-label">Settings</span>
-        </Link>
 
-        <button
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="sidebar-collapse"
-          onClick={() => setCollapsed((value) => !value)}
-          type="button"
-        >
-          {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
-          <span className="nav-label">Collapse sidebar</span>
-        </button>
+        <div className="sidebar-footer">
+          <Link
+            aria-current={pathname === "/settings" ? "page" : undefined}
+            className={`nav-link settings-link${pathname === "/settings" ? " nav-link-active" : ""}`}
+            href="/settings"
+            onClick={() => setMobileOpen(false)}
+            title={collapsed ? "Settings" : undefined}
+          >
+            <Settings2 size={18} strokeWidth={1.8} aria-hidden="true" />
+            <span className="nav-label">Settings</span>
+          </Link>
+
+          <button
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="sidebar-collapse"
+            onClick={() => setCollapsed((value) => !value)}
+            type="button"
+          >
+            {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+            <span className="nav-label">Collapse sidebar</span>
+          </button>
+        </div>
       </aside>
 
       <div className="main-column">
@@ -319,15 +361,17 @@ export function AppShell({
                 >
                   <UsersRound size={15} /> Switch workspace
                 </Link>
-                <form
-                  action={logoutAction}
-                  onSubmit={() => {
+                <button
+                  className="popover-link profile-signout"
+                  onClick={() => {
                     if (profileRef.current) profileRef.current.open = false;
                     setProfileOpen(false);
+                    setLogoutOpen(true);
                   }}
+                  type="button"
                 >
-                  <button className="popover-link profile-signout" type="submit"><LogOut size={15} /> Sign out</button>
-                </form>
+                  <LogOut size={15} /> Sign out
+                </button>
               </div>
             </details>
           </div>
@@ -338,6 +382,44 @@ export function AppShell({
           <span>Workspace analytics · Reporting data</span>
         </footer>
       </div>
+
+      {logoutOpen ? (
+        <dialog
+          aria-labelledby="logout-dialog-title"
+          className="confirmation-dialog"
+          onCancel={(event) => {
+            event.preventDefault();
+            if (!logoutPending) setLogoutOpen(false);
+          }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget && !logoutPending) setLogoutOpen(false);
+          }}
+          onClose={() => {
+            if (!logoutPending) setLogoutOpen(false);
+          }}
+          ref={logoutDialogRef}
+        >
+          <section className="confirmation-dialog-card">
+            <p className="auth-eyebrow">ACCOUNT</p>
+            <h2 id="logout-dialog-title">Sign out of Nexus?</h2>
+            <p className="auth-description">You’ll need to sign in again to access your workspaces.</p>
+            {logoutState.error ? (
+              <p className="form-message form-message-error" role="alert">{logoutState.error}</p>
+            ) : null}
+            <form action={dispatchLogout} className="confirmation-dialog-actions">
+              <button
+                className="button button-secondary"
+                disabled={logoutPending}
+                onClick={() => setLogoutOpen(false)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <LogoutSubmitButton />
+            </form>
+          </section>
+        </dialog>
+      ) : null}
 
       {searchOpen ? (
         <dialog

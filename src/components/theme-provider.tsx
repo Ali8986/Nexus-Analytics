@@ -18,7 +18,7 @@ type ThemeContextValue = {
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
-const THEME_TRANSITION_DURATION_MS = 160;
+const THEME_TRANSITION_DURATION_MS = 280;
 let themeTransitionFrame: number | null = null;
 let themeTransitionTimeout: number | null = null;
 

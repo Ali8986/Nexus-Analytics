@@ -15,7 +15,7 @@ production URLs are supplied here.
 | Output | Next.js default managed output | Do not configure static export or a custom output directory |
 | Runtime | Supabase server clients, server actions, and route handlers require a server runtime | Deploy as a Node.js Next.js app, not static-only hosting |
 | Environment | Two public Supabase variables are validated | Provision production project values and platform environment |
-| Database | 16 ordered migrations are present | Review migration prerequisites and obtain approval before production application |
+| Database | 17 ordered migrations are present | Review migration prerequisites and obtain approval before production application |
 | Authentication email | Local SMTP is not configured for production delivery | Configure and verify a production email provider |
 
 ## Prerequisites
@@ -143,6 +143,12 @@ migrations:
      settings updates through an authorized database function. The Settings
      page's workspace save action depends on this migration; verify its applied
      status in the target project before deploying that feature.
+17. `20261108123000_unarchive_customers_products.sql` — owner/admin restoration
+     of archived customers and products through workspace-authorized functions.
+     The migration conditionally grants schema `CREATE` only for the function
+     ownership transfer, then revokes that temporary privilege; archived-item
+     restore controls depend on this migration. It has not been applied by this
+     repository task.
 
 ### Migration preflight risks
 
@@ -180,6 +186,9 @@ migrations:
 - [ ] Confirm a current backup and a tested restore/rollback path.
 - [ ] Review the full migration diff, especially role creation, ownership
       changes, grants, RLS policies, and constraints.
+- [ ] Confirm the target database supports the audit-writer ownership transfer
+      in `20261108123000`; verify the temporary schema privilege is absent
+      afterward.
 - [ ] Rehearse all migrations in order on a disposable hosted-equivalent
       project using the intended production migration identity.
 - [ ] Run `npx supabase test db --local` and relevant application tests before
@@ -246,8 +255,9 @@ For Vercel or a comparable Next.js platform:
 
 ## Approval still required
 
-This work only prepares project documentation and build metadata. The
-production owner must still choose and provision the Supabase project, domain,
-email provider, Auth policy, secrets, backups, migration window, and deployment
-platform settings. Any hosted project inspection, configuration, migration,
-or deployment requires separate authorization and credentials.
+This guide documents deployment but does not configure or deploy production
+resources. The production owner must still choose and provision the Supabase
+project, domain, email provider, Auth policy, secrets, backups, migration
+window, and deployment platform settings. Any hosted project inspection,
+configuration, migration, or deployment requires separate authorization and
+credentials.

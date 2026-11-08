@@ -2,8 +2,8 @@
 
 import { Eye, EyeOff, LoaderCircle } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   loginSchema,
   passwordRecoverySchema,
@@ -114,37 +114,52 @@ function SubmitButton({
 
 export function LoginForm({ callbackError = false }: { callbackError?: boolean }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
+  const submitting = useRef(false);
+  const sourcePath = useRef(pathname);
   const [message, setMessage] = useState<AuthMessage | null>(
     callbackError
       ? { tone: "error", text: "That sign-in link has expired. Please sign in again." }
       : null,
   );
 
+  useEffect(() => {
+    if (pending && pathname !== sourcePath.current) {
+      submitting.current = false;
+      setPending(false);
+    }
+  }, [pathname, pending]);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting.current) return;
     const parsed = loginSchema.safeParse({ email, password });
     if (!parsed.success) {
       setMessage({ tone: "error", text: firstIssue(parsed.error) });
       return;
     }
 
+    submitting.current = true;
+    sourcePath.current = pathname;
     setPending(true);
     setMessage(null);
     try {
       const { error } = await createClient().auth.signInWithPassword(parsed.data);
       if (error) {
+        submitting.current = false;
+        setPending(false);
         setMessage({ tone: "error", text: friendlyAuthError(error, "login") });
         return;
       }
       router.replace("/");
       router.refresh();
     } catch (error) {
-      setMessage({ tone: "error", text: friendlyAuthError(error, "login") });
-    } finally {
+      submitting.current = false;
       setPending(false);
+      setMessage({ tone: "error", text: friendlyAuthError(error, "login") });
     }
   }
 
@@ -153,36 +168,62 @@ export function LoginForm({ callbackError = false }: { callbackError?: boolean }
       <p className="auth-eyebrow">WELCOME BACK</p>
       <h1>Sign in to Nexus</h1>
       <p className="auth-description">Use your account to continue to your workspace.</p>
-      <form className="auth-form" onSubmit={submit}>
-        <div className="auth-field">
-          <label htmlFor="login-email">Email address</label>
-          <input
-            autoComplete="email"
-            id="login-email"
-            name="email"
-            onChange={(event) => setEmail(event.target.value)}
-            required
-            type="email"
-            value={email}
+      <form aria-busy={pending} className="auth-form" onSubmit={submit}>
+        <fieldset className="auth-pending-fields" disabled={pending}>
+          <div className="auth-field">
+            <label htmlFor="login-email">Email address</label>
+            <input
+              autoComplete="email"
+              id="login-email"
+              name="email"
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              type="email"
+              value={email}
+            />
+          </div>
+          <PasswordInput
+            autoComplete="current-password"
+            id="login-password"
+            label="Password"
+            onChange={setPassword}
+            value={password}
           />
-        </div>
-        <PasswordInput
-          autoComplete="current-password"
-          id="login-password"
-          label="Password"
-          onChange={setPassword}
-          value={password}
-        />
-        <div className="auth-form-row auth-form-row-end">
-          <Link className="text-link" href="/forgot-password">
-            Forgot password?
-          </Link>
-        </div>
+          <div className="auth-form-row auth-form-row-end">
+            <Link
+              aria-disabled={pending}
+              className="text-link"
+              href="/forgot-password"
+              onClick={(event) => {
+                if (pending) event.preventDefault();
+              }}
+              tabIndex={pending ? -1 : undefined}
+            >
+              Forgot password?
+            </Link>
+          </div>
+        </fieldset>
         <FormMessage message={message} />
-        <SubmitButton pending={pending}>Sign in</SubmitButton>
+        {pending ? (
+          <p aria-live="polite" className="auth-pending-message" role="status">
+            <LoaderCircle aria-hidden="true" className="auth-spinner" size={15} />
+            Opening your workspace…
+          </p>
+        ) : null}
+        <SubmitButton pending={pending}>{pending ? "Signing you in…" : "Sign in"}</SubmitButton>
       </form>
-      <p className="auth-switch">
-        Don’t have an account? <Link className="text-link" href="/signup">Create one</Link>
+      <p aria-disabled={pending} className="auth-switch">
+        Don’t have an account?{" "}
+        <Link
+          aria-disabled={pending}
+          href="/signup"
+          onClick={(event) => {
+            if (pending) event.preventDefault();
+          }}
+          tabIndex={pending ? -1 : undefined}
+        >
+          Create one
+        </Link>
       </p>
     </>
   );

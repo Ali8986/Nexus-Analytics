@@ -171,6 +171,26 @@ describe("order status confirmation", () => {
     expect(actionMocks.loadOrders).not.toHaveBeenCalled();
   });
 
+  it("shows the header Create order action only once for an empty list", async () => {
+    const { OrdersManager } = await import("@/components/orders-manager");
+    await act(async () => {
+      root.render(createElement(OrdersManager, {
+        key: "empty-orders",
+        canExport: false,
+        canManage: true,
+        currency: "USD",
+        initialError: "",
+        initialHasMore: false,
+        initialOrders: [],
+        workspaceName: "Test Workspace",
+        workspaceTimezone: "UTC",
+      }));
+    });
+
+    expect([...container.querySelectorAll("button")]
+      .filter((button) => button.textContent?.includes("Create order"))).toHaveLength(1);
+  });
+
   it("keeps the dialog open with a retryable error after a failed response", async () => {
     actionMocks.updateOrderStatusAction.mockResolvedValueOnce({
       error: "The order status could not be changed. Please try again.",

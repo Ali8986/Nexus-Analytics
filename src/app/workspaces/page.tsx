@@ -1,12 +1,12 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { AutoSelectWorkspace } from "@/components/auto-select-workspace";
-import { Button } from "@/components/ui";
+import { WorkspaceSelectForm } from "@/components/workspace-select-form";
 import { getAuthenticatedUser } from "@/lib/auth/current-user";
 import { listUserWorkspaces } from "@/lib/workspaces/list";
 import { getSelectedWorkspaceId } from "@/lib/workspaces/selection";
 import { getWorkspaceRouteDecision } from "@/lib/workspaces/routing";
-import { selectWorkspaceAction } from "@/app/actions/workspaces";
 
 export const instant = false;
 
@@ -47,18 +47,12 @@ export default async function WorkspacesPage({
         ) : null}
         <div className="workspace-option-list">
           {workspaces.map((workspace) => (
-            <form action={selectWorkspaceAction} key={workspace.id}>
-              <input name="workspaceId" type="hidden" value={workspace.id} />
-              <div className="workspace-option-copy">
-                <strong>{workspace.name}</strong>
-                <span>{workspace.role[0].toUpperCase() + workspace.role.slice(1)}</span>
-              </div>
-              <Button type="submit" variant="secondary">
-                Open workspace
-              </Button>
-            </form>
+            <WorkspaceSelectForm key={workspace.id} workspace={workspace} />
           ))}
         </div>
+        <Link className="button button-primary workspace-create-link" href="/workspaces/new">
+          Create another workspace
+        </Link>
       </section>
     </main>
   );

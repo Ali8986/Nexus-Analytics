@@ -7,7 +7,6 @@ import {
   LoaderCircle,
   Plus,
   Search,
-  ShoppingBag,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -823,10 +822,6 @@ export function OrdersManager({
               <EmptyState
                 action={normalizedSearch ? (
                   <Button onClick={() => setOrderSearch("")} size="small">Clear search</Button>
-                ) : canManage ? (
-                  <Button onClick={() => setCreating(true)} variant="primary">
-                    <ShoppingBag size={15} /> Create order
-                  </Button>
                 ) : undefined}
                 description={normalizedSearch
                   ? "No orders on this page match that reference or customer. Try another search or check another page."

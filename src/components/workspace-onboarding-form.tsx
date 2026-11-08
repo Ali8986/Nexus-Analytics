@@ -38,19 +38,21 @@ export function WorkspaceOnboardingForm({ fullName }: { fullName: string }) {
             You’ll be its Owner.
           </p>
         </div>
-        <form action={action} className="auth-form">
-          <div className="auth-field">
-            <label htmlFor="workspace-name">Workspace name</label>
-            <input
-              autoComplete="organization"
-              autoFocus
-              id="workspace-name"
-              maxLength={120}
-              name="name"
-              placeholder="e.g. Northstar Goods"
-              required
-            />
-          </div>
+        <form action={action} aria-busy={pending} className="auth-form">
+          <fieldset className="auth-pending-fields" disabled={pending}>
+            <div className="auth-field">
+              <label htmlFor="workspace-name">Workspace name</label>
+              <input
+                autoComplete="organization"
+                autoFocus
+                id="workspace-name"
+                maxLength={120}
+                name="name"
+                placeholder="e.g. Northstar Goods"
+                required
+              />
+            </div>
+          </fieldset>
           <p className="auth-field-hint">
             Default reporting settings: USD · UTC. You can adjust these later.
           </p>

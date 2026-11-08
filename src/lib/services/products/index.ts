@@ -97,3 +97,15 @@ export async function archiveProduct(workspaceId: string, productId: string): Pr
   if (error) raiseDatabaseError(error);
   return parseRpcId(data);
 }
+
+export async function unarchiveProduct(workspaceId: string, productId: string): Promise<string> {
+  const id = parseInput(productIdInputSchema, { productId }).productId;
+  const workspace = await requireWorkspaceRole(workspaceId, ["owner", "admin"]);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("unarchive_product", {
+    p_workspace_id: workspace.id,
+    p_product_id: id,
+  });
+  if (error) raiseDatabaseError(error);
+  return parseRpcId(data);
+}

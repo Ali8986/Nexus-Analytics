@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   createCustomer: vi.fn(),
   updateCustomer: vi.fn(),
   archiveCustomer: vi.fn(),
+  unarchiveCustomer: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
@@ -24,12 +25,14 @@ vi.mock("@/lib/services/customers", () => ({
   createCustomer: mocks.createCustomer,
   updateCustomer: mocks.updateCustomer,
   archiveCustomer: mocks.archiveCustomer,
+  unarchiveCustomer: mocks.unarchiveCustomer,
 }));
 
 import {
   archiveCustomerAction,
   createCustomerAction,
   loadCustomers,
+  unarchiveCustomerAction,
   updateCustomerAction,
 } from "@/app/actions/customers";
 
@@ -63,6 +66,7 @@ describe("customer server actions", () => {
     mocks.createCustomer.mockResolvedValue(customerId);
     mocks.updateCustomer.mockResolvedValue(customerId);
     mocks.archiveCustomer.mockResolvedValue(customerId);
+    mocks.unarchiveCustomer.mockResolvedValue(customerId);
   });
 
   it("loads a bounded customer page only for the verified selected workspace", async () => {
@@ -102,7 +106,7 @@ describe("customer server actions", () => {
     expect(mocks.createCustomer).not.toHaveBeenCalled();
   });
 
-  it("creates, updates, and archives using the selected workspace context", async () => {
+  it("creates, updates, archives, and restores using the selected workspace context", async () => {
     const input = {
       name: "Avery Smith",
       companyName: "Northwind",
@@ -120,6 +124,7 @@ describe("customer server actions", () => {
     await expect(updateCustomerAction({ ...input, customerId }))
       .resolves.toEqual({ success: true });
     await expect(archiveCustomerAction({ customerId })).resolves.toEqual({ success: true });
+    await expect(unarchiveCustomerAction({ customerId })).resolves.toEqual({ success: true });
 
     expect(mocks.createCustomer).toHaveBeenCalledWith(selectedWorkspaceId, input);
     expect(mocks.updateCustomer).toHaveBeenCalledWith(selectedWorkspaceId, {
@@ -127,7 +132,15 @@ describe("customer server actions", () => {
       customerId,
     });
     expect(mocks.archiveCustomer).toHaveBeenCalledWith(selectedWorkspaceId, customerId);
-    expect(mocks.revalidatePath).toHaveBeenCalledTimes(3);
+    expect(mocks.unarchiveCustomer).toHaveBeenCalledWith(selectedWorkspaceId, customerId);
+    expect(mocks.revalidatePath).toHaveBeenCalledTimes(4);
+  });
+
+  it("validates restore input before resolving a workspace", async () => {
+    await expect(unarchiveCustomerAction({ customerId: "not-an-id" }))
+      .resolves.toMatchObject({ error: expect.any(String) });
+    expect(mocks.getSelectedWorkspaceId).not.toHaveBeenCalled();
+    expect(mocks.unarchiveCustomer).not.toHaveBeenCalled();
   });
 
   it("returns safe authorization errors and does not hide unexpected failures", async () => {

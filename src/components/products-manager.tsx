@@ -8,6 +8,7 @@ import {
   Package,
   Pencil,
   Plus,
+  RotateCcw,
   Search,
   X,
 } from "lucide-react";
@@ -17,6 +18,7 @@ import {
   archiveProductAction,
   createProductAction,
   loadProducts,
+  unarchiveProductAction,
   updateProductAction,
 } from "@/app/actions/products";
 import type { ProductListItem } from "@/app/actions/products";
@@ -331,8 +333,11 @@ export function ProductsManager({
   const [pending, setPending] = useState(false);
   const [archivePending, setArchivePending] = useState(false);
   const [archiveError, setArchiveError] = useState("");
+  const [restorePending, setRestorePending] = useState(false);
+  const [restoreError, setRestoreError] = useState("");
   const listRequestRef = useRef(0);
   const archivePendingRef = useRef(false);
+  const restorePendingRef = useRef(false);
 
   async function refreshList(options?: {
     search?: string;
@@ -411,6 +416,31 @@ export function ProductsManager({
     }
   }
 
+  async function restoreProduct(product: ProductListItem) {
+    if (restorePendingRef.current) return;
+    restorePendingRef.current = true;
+    setRestorePending(true);
+    setRestoreError("");
+    try {
+      const result = await unarchiveProductAction({ productId: product.id });
+      if ("error" in result) {
+        setRestoreError(result.error);
+        return;
+      }
+      setIncludeArchived(false);
+      setOffset(0);
+      const refreshed = await refreshList({ archived: false, nextOffset: 0 });
+      setSuccessMessage(refreshed
+        ? `${product.name} was restored.`
+        : `${product.name} was restored, but the list could not be refreshed.`);
+    } catch {
+      setRestoreError("The product could not be restored. Please try again.");
+    } finally {
+      restorePendingRef.current = false;
+      setRestorePending(false);
+    }
+  }
+
   return (
     <div className="customers-page">
       <div className="customers-page-heading">
@@ -456,6 +486,7 @@ export function ProductsManager({
         {successMessage ? (
           <p className="customers-success-message" role="status">{successMessage}</p>
         ) : null}
+        {restoreError ? <p className="list-inline-error" role="alert">{restoreError}</p> : null}
         {error && products.length === 0 ? (
           <ErrorState
             description={error}
@@ -522,29 +553,41 @@ export function ProductsManager({
                       {canManage ? (
                         <td>
                           <div className="customer-row-actions">
-                            <button
-                              aria-label={`Edit ${product.name}`}
-                              className="icon-button"
-                              disabled={pending}
-                              onClick={() => setEditingProduct(product)}
-                              type="button"
-                            >
-                              <Pencil size={14} />
-                            </button>
                             {!product.archived_at ? (
+                              <>
+                                <button
+                                  aria-label={`Edit ${product.name}`}
+                                  className="icon-button"
+                                  disabled={pending || restorePending}
+                                  onClick={() => setEditingProduct(product)}
+                                  type="button"
+                                >
+                                  <Pencil size={14} />
+                                </button>
+                                <button
+                                  aria-label={`Archive ${product.name}`}
+                                  className="icon-button customer-archive-button"
+                                  disabled={pending || restorePending}
+                                  onClick={() => {
+                                    setArchiveError("");
+                                    setArchivingProduct(product);
+                                  }}
+                                  type="button"
+                                >
+                                  <Archive size={14} />
+                                </button>
+                              </>
+                            ) : (
                               <button
-                                aria-label={`Archive ${product.name}`}
-                                className="icon-button customer-archive-button"
-                                disabled={pending}
-                                onClick={() => {
-                                  setArchiveError("");
-                                  setArchivingProduct(product);
-                                }}
+                                aria-label={`Restore ${product.name}`}
+                                className="icon-button"
+                                disabled={pending || restorePending}
+                                onClick={() => void restoreProduct(product)}
                                 type="button"
                               >
-                                <Archive size={14} />
+                                <RotateCcw size={14} />
                               </button>
-                            ) : null}
+                            )}
                           </div>
                         </td>
                       ) : null}

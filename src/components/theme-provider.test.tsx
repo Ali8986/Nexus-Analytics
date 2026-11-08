@@ -86,7 +86,7 @@ describe("theme preference provider", () => {
     expect(container.querySelector("output")?.textContent).toBe("system");
     expect(dom.window.localStorage.getItem("nexus-theme")).toBeNull();
     expect(document.documentElement.dataset.theme).toBe("light");
-    await act(async () => new Promise((resolve) => dom.window.setTimeout(resolve, 180)));
+    await act(async () => new Promise((resolve) => dom.window.setTimeout(resolve, 300)));
     expect(document.documentElement.classList.contains("theme-transition")).toBe(false);
   });
 
