@@ -3653,15 +3653,17 @@ kbd {
 }
 
 .confirmation-dialog {
+  position: fixed;
+  inset: 0;
   width: min(440px, calc(100vw - 32px));
   max-width: none;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 14px;
+  margin: auto;
   background: transparent;
   color: var(--foreground);
   box-shadow: var(--shadow-card);
-  margin: auto;
 }
 
 .confirmation-dialog::backdrop {
